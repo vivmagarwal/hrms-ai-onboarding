@@ -1,40 +1,40 @@
 # Core dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-pydantic==2.5.2
-pydantic[email]==2.5.2
+fastapi==0.115.4
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+pydantic==2.10.3
+pydantic[email]==2.10.3
 
 # Database
 tinydb==4.8.0
 
 # LangGraph and LangChain
-langgraph==0.2.4
-langchain==0.2.11
-langchain-openai==0.1.20
-langchain-community==0.2.10
+langgraph==0.2.66
+langchain==0.3.12
+langchain-openai==0.2.14
+langchain-community==0.3.12
 
 # HTTP client
-httpx==0.25.2
+httpx==0.28.1
 
 # Environment variables
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # Date/time handling
-python-dateutil==2.8.2
+python-dateutil==2.9.0
 
 # Async support
-aiofiles==23.2.1
+aiofiles==24.1.0
 
 # OpenAI
-openai==1.6.1
+openai==1.58.1
 
 # Logging
-rich==13.7.0
+rich==13.9.4
 
 # Email
 aiosmtplib==3.0.2
-email-validator==2.1.0
+email-validator==2.2.0
 
 # Retry logic
-tenacity==8.2.3
+tenacity==9.0.0
