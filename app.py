@@ -573,16 +573,82 @@ async def check_nda_signed_node(state: OnboardingState) -> OnboardingState:
     return state
 
 async def nda_quiz_node(state: OnboardingState) -> OnboardingState:
-    """Handle NDA quiz"""
-    # Similar to company policy quiz
-    state["quizzes_passed"].append(QuizType.NDA_QUIZ.value)
-    state["current_step"] = "send_dev_guidelines"
+    """Handle NDA quiz - only after NDA is signed"""
+    # Check if NDA is signed first
+    employee = get_employee_by_id(state["employee_id"])
+    if not employee:
+        state["errors"].append("Employee not found")
+        return state
     
-    await update_employee_step_status(
-        state["employee_id"], 
-        "nda_quiz_passed", 
-        OnboardingStepStatus.COMPLETED
-    )
+    status = employee.get("onboarding_status", {})
+    
+    # Verify NDA is signed before allowing quiz
+    if status.get("nda_signed") != OnboardingStepStatus.COMPLETED.value:
+        logger.warning(f"❌ Cannot complete NDA quiz - NDA not signed yet for {state['employee_id']}")
+        state["errors"].append("NDA must be signed before taking quiz")
+        # Don't mark quiz as passed - wait for NDA signature
+        state["current_step"] = "waiting_nda_quiz"
+        
+        # Interrupt and wait for NDA to be signed first
+        interrupt({
+            "message": "⏳ NDA must be signed before quiz can be completed",
+            "employee_id": state["employee_id"],
+            "waiting_for": "nda_signature",
+            "current_status": status
+        })
+        
+        # After interrupt resumes, check again
+        employee = get_employee_by_id(state["employee_id"])
+        if employee and employee.get("onboarding_status", {}).get("nda_signed") == OnboardingStepStatus.COMPLETED.value:
+            # Now NDA is signed, check quiz status
+            if employee.get("onboarding_status", {}).get("nda_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+                # Quiz was completed via webhook
+                state["quizzes_passed"].append(QuizType.NDA_QUIZ.value)
+                state["current_step"] = "send_dev_guidelines"
+                logger.info(f"✅ NDA quiz completed - proceeding to dev guidelines")
+            else:
+                # Still waiting for quiz
+                state["current_step"] = "waiting_nda_quiz"
+                logger.info(f"⏳ Waiting for NDA quiz completion")
+                interrupt({
+                    "message": "⏳ Waiting for NDA quiz to be completed",
+                    "employee_id": state["employee_id"],
+                    "waiting_for": "nda_quiz"
+                })
+        else:
+            # Still not signed
+            logger.warning(f"❌ NDA still not signed after resume")
+            state["errors"].append("NDA signature required")
+    else:
+        # NDA is signed, check if quiz already passed
+        if status.get("nda_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+            # Already passed via webhook
+            state["quizzes_passed"].append(QuizType.NDA_QUIZ.value)
+            state["current_step"] = "send_dev_guidelines"
+            logger.info(f"✅ NDA quiz already passed - proceeding")
+        else:
+            # NDA signed but quiz not passed - wait for quiz
+            state["current_step"] = "waiting_nda_quiz"
+            logger.info(f"⏳ Waiting for NDA quiz completion")
+            
+            interrupt({
+                "message": "⏳ Waiting for NDA quiz to be completed",
+                "employee_id": state["employee_id"],
+                "waiting_for": "nda_quiz"
+            })
+            
+            # After interrupt resumes, check if quiz passed
+            employee = get_employee_by_id(state["employee_id"])
+            if employee and employee.get("onboarding_status", {}).get("nda_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+                state["quizzes_passed"].append(QuizType.NDA_QUIZ.value)
+                state["current_step"] = "send_dev_guidelines"
+                logger.info(f"✅ NDA quiz passed - proceeding to dev guidelines")
+                
+                await update_employee_step_status(
+                    state["employee_id"], 
+                    "nda_quiz_passed", 
+                    OnboardingStepStatus.COMPLETED
+                )
     
     return state
 
@@ -655,23 +721,76 @@ async def check_dev_guidelines_signed_node(state: OnboardingState) -> Onboarding
     return state
 
 async def dev_guidelines_quiz_node(state: OnboardingState) -> OnboardingState:
-    """Handle dev guidelines quiz - REAL CHECK, NO SIMULATION"""
+    """Handle dev guidelines quiz - only after guidelines are signed"""
+    # Check if dev guidelines are signed first
     employee = get_employee_by_id(state["employee_id"])
     if not employee:
         state["errors"].append("Employee not found")
         return state
     
-    logger.info(f"📝 CHECKING REAL DEV GUIDELINES QUIZ STATUS for {employee['email']}")
-    logger.info(f"   Dev quiz passed: {employee.get('onboarding_status', {}).get('dev_guidelines_quiz_passed')}")
+    status = employee.get("onboarding_status", {})
     
-    if employee.get("onboarding_status", {}).get("dev_guidelines_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
-        state["quizzes_passed"].append(QuizType.DEV_GUIDELINES_QUIZ.value)
-        state["current_step"] = "final_tasks"
-        logger.info(f"✅ Dev guidelines quiz ACTUALLY passed - proceeding to final tasks")
+    logger.info(f"📝 CHECKING DEV GUIDELINES QUIZ STATUS for {employee['email']}")
+    logger.info(f"   Dev guidelines signed: {status.get('dev_guidelines_signed')}")
+    logger.info(f"   Dev quiz passed: {status.get('dev_guidelines_quiz_passed')}")
+    
+    # Verify dev guidelines are signed before allowing quiz
+    if status.get("dev_guidelines_signed") != OnboardingStepStatus.COMPLETED.value:
+        logger.warning(f"❌ Cannot complete dev guidelines quiz - guidelines not signed yet for {state['employee_id']}")
+        state["errors"].append("Dev guidelines must be signed before taking quiz")
+        state["current_step"] = "waiting_dev_quiz"
+        
+        interrupt({
+            "message": "⏳ Dev guidelines must be signed before quiz",
+            "employee_id": state["employee_id"],
+            "waiting_for": "dev_guidelines_signature"
+        })
+        
+        # After interrupt resumes, check again
+        employee = get_employee_by_id(state["employee_id"])
+        if employee and employee.get("onboarding_status", {}).get("dev_guidelines_signed") == OnboardingStepStatus.COMPLETED.value:
+            # Guidelines signed, check quiz
+            if employee.get("onboarding_status", {}).get("dev_guidelines_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+                state["quizzes_passed"].append(QuizType.DEV_GUIDELINES_QUIZ.value)
+                state["current_step"] = "final_tasks"
+                logger.info(f"✅ Dev guidelines quiz completed - proceeding to final tasks")
+            else:
+                state["current_step"] = "waiting_dev_quiz"
+                logger.info(f"⏳ Waiting for dev guidelines quiz")
+                interrupt({
+                    "message": "⏳ Waiting for dev guidelines quiz",
+                    "employee_id": state["employee_id"],
+                    "waiting_for": "dev_guidelines_quiz"
+                })
     else:
-        state["current_step"] = "waiting_for_dev_quiz"
-        logger.info(f"⏳ WAITING for actual dev guidelines quiz completion")
-        raise ValueError("WORKFLOW_PAUSED: Waiting for dev guidelines quiz")
+        # Guidelines signed, check if quiz already passed
+        if status.get("dev_guidelines_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+            state["quizzes_passed"].append(QuizType.DEV_GUIDELINES_QUIZ.value)
+            state["current_step"] = "final_tasks"
+            logger.info(f"✅ Dev guidelines quiz already passed - proceeding to final tasks")
+        else:
+            # Wait for quiz
+            state["current_step"] = "waiting_dev_quiz"
+            logger.info(f"⏳ Waiting for dev guidelines quiz completion")
+            
+            interrupt({
+                "message": "⏳ Waiting for dev guidelines quiz",
+                "employee_id": state["employee_id"],
+                "waiting_for": "dev_guidelines_quiz"
+            })
+            
+            # After interrupt resumes, check if quiz passed
+            employee = get_employee_by_id(state["employee_id"])
+            if employee and employee.get("onboarding_status", {}).get("dev_guidelines_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+                state["quizzes_passed"].append(QuizType.DEV_GUIDELINES_QUIZ.value)
+                state["current_step"] = "final_tasks"
+                logger.info(f"✅ Dev guidelines quiz passed - proceeding to final tasks")
+                
+                await update_employee_step_status(
+                    state["employee_id"], 
+                    "dev_guidelines_quiz_passed", 
+                    OnboardingStepStatus.COMPLETED
+                )
     
     return state
 
@@ -1354,7 +1473,33 @@ async def webhook_quiz_status(webhook_data: Dict[str, Any] = Body(...)):
         if not all([employee_id, quiz_type, score is not None, passed is not None]):
             raise HTTPException(status_code=400, detail="Missing required fields")
         
-        # Update quiz status
+        # Verify prerequisites before accepting quiz completion
+        employee = get_employee_by_id(employee_id)
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
+        status = employee.get("onboarding_status", {})
+        
+        # Check prerequisites for each quiz type
+        if quiz_type == "nda_quiz":
+            # NDA must be signed before NDA quiz can be completed
+            if status.get("nda_signed") != OnboardingStepStatus.COMPLETED.value:
+                logger.warning(f"❌ Rejecting NDA quiz completion - NDA not signed for {employee_id}")
+                raise HTTPException(status_code=400, detail="NDA must be signed before quiz can be completed")
+        elif quiz_type == "dev_guidelines_quiz":
+            # Both NDA and NDA quiz must be complete, and dev guidelines must be signed
+            if (status.get("nda_signed") != OnboardingStepStatus.COMPLETED.value or
+                status.get("nda_quiz_passed") != OnboardingStepStatus.COMPLETED.value or
+                status.get("dev_guidelines_signed") != OnboardingStepStatus.COMPLETED.value):
+                logger.warning(f"❌ Rejecting dev guidelines quiz - prerequisites not met for {employee_id}")
+                raise HTTPException(status_code=400, detail="Prerequisites not met for dev guidelines quiz")
+        elif quiz_type == "company_policy_quiz":
+            # Company policy must be signed
+            if status.get("company_policy_signed") != OnboardingStepStatus.COMPLETED.value:
+                logger.warning(f"❌ Rejecting company policy quiz - policy not signed for {employee_id}")
+                raise HTTPException(status_code=400, detail="Company policy must be signed before quiz")
+        
+        # Update quiz status only if prerequisites are met
         status_mapping = {
             "company_policy_quiz": "company_policy_quiz_passed",
             "nda_quiz": "nda_quiz_passed",
