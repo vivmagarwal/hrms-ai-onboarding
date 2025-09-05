@@ -1,0 +1,297 @@
+# HRMS AI-Powered Onboarding System - API Tests
+# Compatible with VSCode REST Client Extension
+# https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+
+@baseUrl = http://localhost:8000
+@contentType = application/json
+
+###
+# ==========================================
+# HEALTH & SYSTEM ENDPOINTS
+# ==========================================
+
+### Health Check
+GET {{baseUrl}}/health
+
+###
+### Root Endpoint
+GET {{baseUrl}}/
+
+###
+### API Info
+GET {{baseUrl}}/api
+
+###
+# ==========================================
+# EMPLOYEE MANAGEMENT
+# ==========================================
+
+### Get All Employees
+GET {{baseUrl}}/api/employees
+
+###
+### Create New Employee (Standard Test User)
+POST {{baseUrl}}/api/employees
+Content-Type: {{contentType}}
+
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "role": "Software Engineer",
+  "department": "Engineering",
+  "start_date": "2025-09-05"
+}
+
+###
+### Create Test Employee (Ethereal Email for Real Testing)
+POST {{baseUrl}}/api/employees
+Content-Type: {{contentType}}
+
+{
+  "name": "Test User Ethereal",
+  "email": "ydxvhgctqvcrsk4n@ethereal.email",
+  "role": "QA Engineer",
+  "department": "Quality Assurance", 
+  "start_date": "2025-09-05"
+}
+
+###
+### Get Employee by ID (replace with actual ID from create response)
+@employeeId = 1
+GET {{baseUrl}}/api/employees/{{employeeId}}
+
+###
+### Update Employee Status
+PUT {{baseUrl}}/api/employees/{{employeeId}}/status
+Content-Type: {{contentType}}
+
+{
+  "onboarding_status": {
+    "company_policy_sent": "completed",
+    "company_policy_signed": "completed",
+    "company_policy_quiz_passed": "completed"
+  }
+}
+
+###
+# ==========================================
+# ONBOARDING WORKFLOW
+# ==========================================
+
+### Start Onboarding Workflow
+POST {{baseUrl}}/api/onboarding/start
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "{{employeeId}}"
+}
+
+###
+### Get Workflow Status by Thread ID
+@threadId = test_thread_123
+GET {{baseUrl}}/api/onboarding/status/{{threadId}}
+
+###
+# ==========================================
+# WEBHOOKS (External Service Callbacks)
+# ==========================================
+
+### Document Status Webhook
+POST {{baseUrl}}/api/webhooks/document-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "{{employeeId}}",
+  "document_type": "company_policy",
+  "status": "sent",
+  "timestamp": "2025-09-05T10:00:00Z"
+}
+
+###
+### Quiz Status Webhook
+POST {{baseUrl}}/api/webhooks/quiz-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "{{employeeId}}",
+  "quiz_type": "company_policy_quiz",
+  "score": 85,
+  "passed": true,
+  "attempt_number": 1,
+  "timestamp": "2025-09-05T11:00:00Z"
+}
+
+###
+# ==========================================
+# COMPLETE WORKFLOW TEST SEQUENCE
+# ==========================================
+
+### Step 1: Create Test Employee
+POST {{baseUrl}}/api/employees
+Content-Type: {{contentType}}
+
+{
+  "name": "Workflow Test User",
+  "email": "ydxvhgctqvcrsk4n@ethereal.email", 
+  "role": "Test Engineer",
+  "department": "Testing",
+  "start_date": "2025-09-05"
+}
+
+###
+### Step 2: Start Onboarding (use employee ID from Step 1 response)
+POST {{baseUrl}}/api/onboarding/start
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1"
+}
+
+###
+### Step 3: Check Employee Status
+GET {{baseUrl}}/api/employees/REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1
+
+###
+### Step 4: Simulate Company Policy Document Sent Callback
+POST {{baseUrl}}/api/webhooks/document-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1",
+  "document_type": "company_policy",
+  "status": "signed",
+  "timestamp": "2025-09-05T10:30:00Z"
+}
+
+###
+### Step 5: Simulate Company Policy Quiz Passed Callback  
+POST {{baseUrl}}/api/webhooks/quiz-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1",
+  "quiz_type": "company_policy_quiz",
+  "score": 88,
+  "passed": true,
+  "attempt_number": 1,
+  "timestamp": "2025-09-05T11:00:00Z"
+}
+
+###
+### Step 6: Simulate NDA Document Sent Callback
+POST {{baseUrl}}/api/webhooks/document-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1",
+  "document_type": "nda",
+  "status": "signed",
+  "timestamp": "2025-09-05T11:30:00Z"
+}
+
+###
+### Step 7: Simulate NDA Quiz Passed Callback
+POST {{baseUrl}}/api/webhooks/quiz-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1",
+  "quiz_type": "nda_quiz",
+  "score": 92,
+  "passed": true,
+  "attempt_number": 1,
+  "timestamp": "2025-09-05T12:00:00Z"
+}
+
+###
+# ==========================================
+# ERROR TESTING
+# ==========================================
+
+### Test Invalid Employee ID
+GET {{baseUrl}}/api/employees/999
+
+###
+### Test Invalid JSON (Missing Required Fields)
+POST {{baseUrl}}/api/employees
+Content-Type: {{contentType}}
+
+{
+  "name": "Incomplete User"
+}
+
+###
+### Test Duplicate Email
+POST {{baseUrl}}/api/employees
+Content-Type: {{contentType}}
+
+{
+  "name": "Duplicate User",
+  "email": "ydxvhgctqvcrsk4n@ethereal.email",
+  "role": "Developer", 
+  "department": "Engineering",
+  "start_date": "2025-09-05"
+}
+
+###
+### Test Invalid Webhook Data
+POST {{baseUrl}}/api/webhooks/quiz-status
+Content-Type: {{contentType}}
+
+{
+  "employee_id": "999",
+  "quiz_type": "invalid_quiz",
+  "score": -10,
+  "passed": false
+}
+
+###
+# ==========================================
+# TESTING INSTRUCTIONS
+# ==========================================
+#
+# 1. Start the FastAPI server:
+#    cd /Users/vivmagarwal/Work/AI\ DEMOS/hrms
+#    python -m uvicorn app:app --reload
+#
+# 2. Install VSCode REST Client extension:
+#    https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+#
+# 3. Testing Steps:
+#    a) Run "Create Test Employee" first
+#    b) Copy the employee ID from the response
+#    c) Replace all "REPLACE_WITH_EMPLOYEE_ID_FROM_STEP_1" with actual ID
+#    d) Run the workflow sequence step by step
+#    e) Check status after each step
+#
+# 4. Email Testing:
+#    - All emails sent to: ydxvhgctqvcrsk4n@ethereal.email
+#    - View emails at: https://ethereal.email
+#    - Login with credentials from .env.ethereal file
+#
+# 5. Monitor Server Logs:
+#    tail -f server_new.log
+#
+# 6. Expected Workflow Flow:
+#    Create Employee -> Start Onboarding -> Company Policy Sent -> 
+#    Company Policy Signed -> Company Policy Quiz -> NDA Sent -> 
+#    NDA Signed -> NDA Quiz -> Final Tasks (Slack, JIRA, Call)
+#
+# ==========================================
+# EXPECTED RESPONSES
+# ==========================================
+#
+# GET /health: {"status": "healthy"}
+# POST /api/employees: {"id": "...", "name": "...", "email": "...", ...}
+# POST /api/onboarding/start: {"thread_id": "...", "status": "started"}
+# POST /api/webhooks/*: {"status": "success", "message": "..."}
+#
+# ==========================================
+# TROUBLESHOOTING
+# ==========================================
+#
+# - Server not responding: Check if uvicorn is running on port 8000
+# - Emails not received: Check https://ethereal.email with test account
+# - Workflow stuck: Check server logs for interrupt messages and errors
+# - Database issues: Delete hrms.db file to reset database
+# - Missing dependencies: pip install -r requirements.txt
