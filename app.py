@@ -1392,6 +1392,75 @@ async def get_onboarding_status(thread_id: str):
         "progress": employee.onboarding_status.calculate_progress()
     }
 
+@app.delete("/api/admin/clear-all-data")
+async def clear_all_data():
+    """
+    Clear all data from the database - FOR TESTING PURPOSES ONLY
+    Removes all employees, workflows, and resets the database to empty state
+    """
+    try:
+        # Get count before clearing
+        employee_count = len(employees_table.all())
+        
+        # Clear all employees and their onboarding data
+        employees_table.truncate()
+        
+        # Clear workflow checkpointer memory if possible
+        try:
+            if hasattr(workflow_checkpointer, 'storage'):
+                workflow_checkpointer.storage.clear()
+        except Exception as e:
+            logger.warning(f"Could not clear workflow checkpointer: {e}")
+        
+        logger.info(f"🗑️  Database cleared: Removed {employee_count} employees")
+        
+        return {
+            "status": "success",
+            "message": f"All data cleared successfully. Removed {employee_count} employees.",
+            "cleared_count": employee_count,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error clearing database: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear data: {str(e)}")
+
+@app.get("/api/admin/stats")
+async def get_admin_stats():
+    """Get basic statistics about the system"""
+    try:
+        all_employees = employees_table.all()
+        employee_count = len(all_employees)
+        
+        # Count by status
+        status_counts = {}
+        for emp in all_employees:
+            if 'onboarding_status' in emp:
+                # Count completed steps
+                completed_steps = 0
+                total_steps = 12  # Total possible steps
+                status = emp['onboarding_status']
+                
+                for step_key, step_value in status.items():
+                    if step_key.endswith('_at'):  # Skip timestamp fields
+                        continue
+                    if step_value == 'completed':
+                        completed_steps += 1
+                
+                progress_bucket = f"{int((completed_steps/total_steps)*100)}%"
+                status_counts[progress_bucket] = status_counts.get(progress_bucket, 0) + 1
+        
+        return {
+            "total_employees": employee_count,
+            "progress_distribution": status_counts,
+            "database_file": str(Path("hrms.db").absolute()),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))

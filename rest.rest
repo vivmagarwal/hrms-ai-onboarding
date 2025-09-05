@@ -2,7 +2,7 @@
 # Compatible with VSCode REST Client Extension
 # https://marketplace.visualstudio.com/items?itemName=humao.rest-client
 
-@baseUrl = http://localhost:8000
+@baseUrl = https://hrms-ai-onboarding.onrender.com/
 @contentType = application/json
 
 ###
@@ -202,6 +202,18 @@ Content-Type: {{contentType}}
   "attempt_number": 1,
   "timestamp": "2025-09-05T12:00:00Z"
 }
+
+###
+# ==========================================
+# ADMIN ENDPOINTS (FOR TESTING)
+# ==========================================
+
+### Get System Statistics
+GET {{baseUrl}}/api/admin/stats
+
+###
+### Clear All Data (CAUTION: Deletes everything!)
+DELETE {{baseUrl}}/api/admin/clear-all-data
 
 ###
 # ==========================================
