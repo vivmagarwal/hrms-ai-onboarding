@@ -369,15 +369,16 @@ class EmailService:
         return templates.get(template_type, templates["welcome"])
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def send_email(self, to_email: str, subject: str, content: str, template_type: str = "default") -> Dict[str, Any]:
+    async def send_email(self, to_email: str, subject: str, body: str, template_type: str = "default") -> Dict[str, Any]:
         """Send email via webhook"""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 payload = {
                     "to": to_email,
                     "subject": subject,
-                    "content": content,
-                    "template": template_type,
+                    "body": body,
+                    "from_name": "HR Department",
+                    "from_email": "hr@company.com",
                     "timestamp": datetime.now().isoformat()
                 }
                 
@@ -827,27 +828,23 @@ async def final_tasks_node(state: OnboardingState) -> OnboardingState:
     async def send_slack_invite():
         try:
             slack_link = os.getenv("SLACK_INVITE_LINK", "https://join.slack.com/t/company/shared_invite/example")
-            body_text = f"""Hi {employee_data['name']},
-
-Welcome to the team! You've been invited to join our Slack workspace.
-
-Click here to join: {slack_link}
-
-Slack is our primary communication tool. Once you join:
-- Introduce yourself in #general
-- Join your team's channel
-- Set up your profile with your photo and role
-
-If you have any questions, please reach out to your manager or the IT team.
-
-Best regards,
-HR Team"""
+            body_html = f"""<p>Hi {employee_data['name']},</p>
+<p>Welcome to the team! You've been invited to join our Slack workspace.</p>
+<p><strong>Click here to join:</strong> <a href="{slack_link}">{slack_link}</a></p>
+<p>Slack is our primary communication tool. Once you join:</p>
+<ul>
+<li>Introduce yourself in #general</li>
+<li>Join your team's channel</li>
+<li>Set up your profile with your photo and role</li>
+</ul>
+<p>If you have any questions, please reach out to your manager or the IT team.</p>
+<p>Best regards,<br>HR Team</p>"""
             
-            await smtp_email_service.send_email(
+            await email_service.send_email(
                 to_email=employee_data["email"],
                 subject="Join Our Slack Workspace",
-                body=body_text,
-                from_name="HR Department"
+                body=body_html,
+                template_type="slack_invite"
             )
             state["final_tasks_status"]["slack"] = True
             await update_employee_step_status(state["employee_id"], "slack_invite_sent", OnboardingStepStatus.COMPLETED)
@@ -860,31 +857,29 @@ HR Team"""
     async def grant_jira_access():
         try:
             jira_url = os.getenv("JIRA_URL", "https://company.atlassian.net")
-            body_text = f"""Hi {employee_data['name']},
-
-Your Jira access has been granted! You can now access our project management system.
-
-Jira URL: {jira_url}
-Username: {employee_data['email']}
-
-A temporary password has been sent to you in a separate email. Please change it on your first login.
-
-Getting Started:
-- Browse active projects in your department
-- Review the sprint board
-- Check your assigned tasks (if any)
-- Familiarize yourself with our workflow states
-
-For Jira training and best practices, check our internal wiki or contact your team lead.
-
-Best regards,
-IT Team"""
+            body_html = f"""<p>Hi {employee_data['name']},</p>
+<p>Your Jira access has been granted! You can now access our project management system.</p>
+<p><strong>Access Details:</strong></p>
+<ul>
+<li><strong>Jira URL:</strong> <a href="{jira_url}">{jira_url}</a></li>
+<li><strong>Username:</strong> {employee_data['email']}</li>
+</ul>
+<p>A temporary password has been sent to you in a separate email. Please change it on your first login.</p>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li>Browse active projects in your department</li>
+<li>Review the sprint board</li>
+<li>Check your assigned tasks (if any)</li>
+<li>Familiarize yourself with our workflow states</li>
+</ul>
+<p>For Jira training and best practices, check our internal wiki or contact your team lead.</p>
+<p>Best regards,<br>IT Team</p>"""
             
-            await smtp_email_service.send_email(
+            await email_service.send_email(
                 to_email=employee_data["email"],
                 subject="Jira Access Granted",
-                body=body_text,
-                from_name="HR Department"
+                body=body_html,
+                template_type="jira_access"
             )
             state["final_tasks_status"]["jira"] = True
             await update_employee_step_status(state["employee_id"], "jira_access_granted", OnboardingStepStatus.COMPLETED)
@@ -898,31 +893,26 @@ IT Team"""
         try:
             calendly_link = os.getenv("CALENDLY_LINK", "https://calendly.com/vivek-m-agarwal/30min")
             manager_name = os.getenv("MANAGER_NAME", "Your Manager")
-            body_text = f"""Hi {employee_data['name']},
-
-Congratulations on completing your onboarding documentation!
-
-The final step is to schedule your onboarding call with {manager_name}. During this call, we'll:
-- Welcome you to the team
-- Discuss your role and responsibilities
-- Review your first week's schedule
-- Answer any questions you may have
-
-Please schedule your call at your earliest convenience:
-{calendly_link}
-
-The call typically takes 30 minutes. Please come prepared with any questions about your role, the team, or the company.
-
-We're looking forward to speaking with you!
-
-Best regards,
-HR Team"""
+            body_html = f"""<p>Hi {employee_data['name']},</p>
+<p>Congratulations on completing your onboarding documentation!</p>
+<p>The final step is to schedule your onboarding call with {manager_name}. During this call, we'll:</p>
+<ul>
+<li>Welcome you to the team</li>
+<li>Discuss your role and responsibilities</li>
+<li>Review your first week's schedule</li>
+<li>Answer any questions you may have</li>
+</ul>
+<p><strong>Please schedule your call at your earliest convenience:</strong><br>
+<a href="{calendly_link}">{calendly_link}</a></p>
+<p>The call typically takes 30 minutes. Please come prepared with any questions about your role, the team, or the company.</p>
+<p>We're looking forward to speaking with you!</p>
+<p>Best regards,<br>HR Team</p>"""
             
-            await smtp_email_service.send_email(
+            await email_service.send_email(
                 to_email=employee_data["email"],
                 subject="Schedule Your Onboarding Call",
-                body=body_text,
-                from_name="HR Department"
+                body=body_html,
+                template_type="meeting_scheduled"
             )
             state["final_tasks_status"]["call"] = True
             await update_employee_step_status(state["employee_id"], "onboarding_call_scheduled", OnboardingStepStatus.COMPLETED)
