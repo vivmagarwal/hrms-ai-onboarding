@@ -473,28 +473,35 @@ async def check_company_policy_signed_node(state: OnboardingState) -> Onboarding
 
 async def company_policy_quiz_node(state: OnboardingState) -> OnboardingState:
     """Handle company policy quiz - check if completed or wait"""
-    try:
-        employee = get_employee_by_id(state["employee_id"])
-        if employee and employee.get("onboarding_status", {}).get("company_policy_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
-            # Already passed via webhook
-            state["quizzes_passed"].append(QuizType.COMPANY_POLICY_QUIZ.value)
-            state["current_step"] = "nda"
-            logger.info(f"✅ Company policy quiz passed - proceeding to NDA")
-            return state
-        else:
-            # Not passed yet - INTERRUPT and wait for webhook
-            logger.info(f"⏳ Waiting for company policy quiz completion - INTERRUPTING workflow")
-            interrupt({
-                "status": "waiting_for_quiz",
-                "quiz_type": "company_policy_quiz",
-                "employee_id": state["employee_id"],
-                "message": "Waiting for quiz completion via webhook"
-            })
-            
-    except Exception as e:
-        state["errors"].append(f"Quiz error: {str(e)}")
-        logger.error(f"Error in company_policy_quiz_node: {e}")
+    employee = get_employee_by_id(state["employee_id"])
     
+    # Check if quiz is already passed
+    if employee and employee.get("onboarding_status", {}).get("company_policy_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+        # Already passed via webhook
+        state["quizzes_passed"].append(QuizType.COMPANY_POLICY_QUIZ.value)
+        state["current_step"] = "nda"
+        logger.info(f"✅ Company policy quiz passed - proceeding to NDA")
+        return state
+    
+    # Not passed yet - INTERRUPT and wait for webhook
+    logger.info(f"⏳ Waiting for company policy quiz completion - INTERRUPTING workflow")
+    interrupt({
+        "status": "waiting_for_quiz",
+        "quiz_type": "company_policy_quiz",
+        "employee_id": state["employee_id"],
+        "message": "Waiting for quiz completion via webhook"
+    })
+    
+    # After interrupt resumes, check again
+    employee = get_employee_by_id(state["employee_id"])
+    if employee and employee.get("onboarding_status", {}).get("company_policy_quiz_passed") == OnboardingStepStatus.COMPLETED.value:
+        state["quizzes_passed"].append(QuizType.COMPANY_POLICY_QUIZ.value)
+        state["current_step"] = "nda"
+        logger.info(f"✅ Company policy quiz passed after resume - proceeding to NDA")
+        return state
+    
+    # Still not passed
+    state["errors"].append("Quiz not passed after resume")
     return state
 
 async def send_nda_node(state: OnboardingState) -> OnboardingState:
@@ -979,7 +986,7 @@ async def resume_workflow_if_needed(employee_id: str, trigger_event: str):
             # Use the existing workflow instance, not a new one
             # Use ainvoke since all nodes are async
             result = await onboarding_workflow.ainvoke(
-                Command(resume=None),  # Resume from interrupt point
+                Command(resume=True),  # Resume from interrupt point with True
                 config=config
             )
             
