@@ -2,7 +2,7 @@
 # Compatible with VSCode REST Client Extension
 # https://marketplace.visualstudio.com/items?itemName=humao.rest-client
 
-@baseUrl = https://hrms-ai-onboarding.onrender.com/
+@baseUrl = https://hrms-ai-onboarding.onrender.com
 @contentType = application/json
 
 ###

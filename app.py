@@ -423,17 +423,8 @@ async def send_company_policy_node(state: OnboardingState) -> OnboardingState:
         )
         state["documents_sent"].append(DocumentType.COMPANY_POLICY.value)
         
-        # Send email notification
-        content = await email_service.generate_email_content("document_ready", {
-            **employee_data,
-            "document_type": "Company Policy"
-        })
-        await email_service.send_email(
-            employee_data["email"],
-            "Company Policy Ready for Review",
-            content,
-            "document_ready"
-        )
+        # Email already sent by doc-esign service with signing link
+        # No need for duplicate email here
         
         # Update employee status in DB
         await update_employee_step_status(
@@ -531,17 +522,8 @@ async def send_nda_node(state: OnboardingState) -> OnboardingState:
         state["documents_sent"].append(DocumentType.NDA.value)
         state["current_step"] = "wait_nda_signature"
         
-        # Send email notification
-        content = await email_service.generate_email_content("document_ready", {
-            **employee_data,
-            "document_type": "Non-Disclosure Agreement"
-        })
-        await email_service.send_email(
-            employee_data["email"],
-            "NDA Ready for Review",
-            content,
-            "document_ready"
-        )
+        # Email already sent by doc-esign service with signing link
+        # No need for duplicate email here
         
         await update_employee_step_status(
             state["employee_id"], 
@@ -686,17 +668,8 @@ async def send_dev_guidelines_node(state: OnboardingState) -> OnboardingState:
         state["documents_sent"].append(DocumentType.DEV_GUIDELINES.value)
         state["current_step"] = "wait_dev_guidelines_signature"
         
-        # Send email notification  
-        content = await email_service.generate_email_content("document_ready", {
-            **employee_data,
-            "document_type": "Development Guidelines"
-        })
-        await email_service.send_email(
-            employee_data["email"],
-            "Development Guidelines Ready for Review",
-            content,
-            "document_ready"
-        )
+        # Email already sent by doc-esign service with signing link
+        # No need for duplicate email here
         
         await update_employee_step_status(
             state["employee_id"], 
@@ -853,48 +826,110 @@ async def final_tasks_node(state: OnboardingState) -> OnboardingState:
     # Slack invite
     async def send_slack_invite():
         try:
-            content = await email_service.generate_email_content("slack_invite", employee_data)
-            await email_service.send_email(
-                employee_data["email"],
-                "Join Our Slack Workspace",
-                content,
-                "slack_invite"
+            slack_link = os.getenv("SLACK_INVITE_LINK", "https://join.slack.com/t/company/shared_invite/example")
+            body_text = f"""Hi {employee_data['name']},
+
+Welcome to the team! You've been invited to join our Slack workspace.
+
+Click here to join: {slack_link}
+
+Slack is our primary communication tool. Once you join:
+- Introduce yourself in #general
+- Join your team's channel
+- Set up your profile with your photo and role
+
+If you have any questions, please reach out to your manager or the IT team.
+
+Best regards,
+HR Team"""
+            
+            await smtp_email_service.send_email(
+                to_email=employee_data["email"],
+                subject="Join Our Slack Workspace",
+                body=body_text,
+                from_name="HR Department"
             )
             state["final_tasks_status"]["slack"] = True
             await update_employee_step_status(state["employee_id"], "slack_invite_sent", OnboardingStepStatus.COMPLETED)
+            logger.info(f"✅ Slack invite sent to {employee_data['email']}")
         except Exception as e:
             state["errors"].append(f"Slack invite error: {str(e)}")
+            logger.error(f"❌ Failed to send Slack invite: {e}")
     
     # Jira access
     async def grant_jira_access():
         try:
-            content = await email_service.generate_email_content("jira_access", employee_data)
-            await email_service.send_email(
-                employee_data["email"],
-                "Jira Access Granted",
-                content,
-                "jira_access"
+            jira_url = os.getenv("JIRA_URL", "https://company.atlassian.net")
+            body_text = f"""Hi {employee_data['name']},
+
+Your Jira access has been granted! You can now access our project management system.
+
+Jira URL: {jira_url}
+Username: {employee_data['email']}
+
+A temporary password has been sent to you in a separate email. Please change it on your first login.
+
+Getting Started:
+- Browse active projects in your department
+- Review the sprint board
+- Check your assigned tasks (if any)
+- Familiarize yourself with our workflow states
+
+For Jira training and best practices, check our internal wiki or contact your team lead.
+
+Best regards,
+IT Team"""
+            
+            await smtp_email_service.send_email(
+                to_email=employee_data["email"],
+                subject="Jira Access Granted",
+                body=body_text,
+                from_name="HR Department"
             )
             state["final_tasks_status"]["jira"] = True
             await update_employee_step_status(state["employee_id"], "jira_access_granted", OnboardingStepStatus.COMPLETED)
+            logger.info(f"✅ Jira access granted email sent to {employee_data['email']}")
         except Exception as e:
             state["errors"].append(f"Jira access error: {str(e)}")
+            logger.error(f"❌ Failed to send Jira access email: {e}")
     
     # Schedule onboarding call
     async def schedule_call():
         try:
             calendly_link = os.getenv("CALENDLY_LINK", "https://calendly.com/vivek-m-agarwal/30min")
-            content = f"Hi {employee_data['name']},\n\nPlease schedule your onboarding call at: {calendly_link}"
-            await email_service.send_email(
-                employee_data["email"],
-                "Schedule Your Onboarding Call",
-                content,
-                "meeting_scheduled"
+            manager_name = os.getenv("MANAGER_NAME", "Your Manager")
+            body_text = f"""Hi {employee_data['name']},
+
+Congratulations on completing your onboarding documentation!
+
+The final step is to schedule your onboarding call with {manager_name}. During this call, we'll:
+- Welcome you to the team
+- Discuss your role and responsibilities
+- Review your first week's schedule
+- Answer any questions you may have
+
+Please schedule your call at your earliest convenience:
+{calendly_link}
+
+The call typically takes 30 minutes. Please come prepared with any questions about your role, the team, or the company.
+
+We're looking forward to speaking with you!
+
+Best regards,
+HR Team"""
+            
+            await smtp_email_service.send_email(
+                to_email=employee_data["email"],
+                subject="Schedule Your Onboarding Call",
+                body=body_text,
+                from_name="HR Department"
             )
             state["final_tasks_status"]["call"] = True
             await update_employee_step_status(state["employee_id"], "onboarding_call_scheduled", OnboardingStepStatus.COMPLETED)
+            logger.info(f"✅ Onboarding call scheduling email sent to {employee_data['email']}")
         except Exception as e:
             state["errors"].append(f"Call scheduling error: {str(e)}")
+            logger.error(f"❌ Failed to send call scheduling email: {e}")
     
     # Execute all tasks in parallel
     await asyncio.gather(send_slack_invite(), grant_jira_access(), schedule_call())
