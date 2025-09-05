@@ -1429,12 +1429,17 @@ async def webhook_document_status(webhook_data: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=400, detail="Missing required fields")
         
         # Map document type to status field
+        # Note: doc-esign sends "nda_policy" but we track it as "nda"
         status_mapping = {
             "company_policy": {
                 "sent": "company_policy_sent",
                 "signed": "company_policy_signed"
             },
             "nda": {
+                "sent": "nda_sent",
+                "signed": "nda_signed"
+            },
+            "nda_policy": {  # doc-esign sends this format
                 "sent": "nda_sent",
                 "signed": "nda_signed"
             },
@@ -1453,7 +1458,9 @@ async def webhook_document_status(webhook_data: Dict[str, Any] = Body(...)):
             )
             
             # Resume workflow if interrupted
-            await resume_workflow_if_needed(employee_id, f"{document_type}_{status}")
+            # Normalize document type for resume (nda_policy -> nda)
+            resume_doc_type = "nda" if document_type == "nda_policy" else document_type
+            await resume_workflow_if_needed(employee_id, f"{resume_doc_type}_{status}")
             
         logger.info(f"Document webhook: {document_type} {status} for employee {employee_id}")
         return {"status": "received", "processed": True}
