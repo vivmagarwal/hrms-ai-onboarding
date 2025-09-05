@@ -565,10 +565,17 @@ async def check_nda_signed_node(state: OnboardingState) -> OnboardingState:
         state["documents_signed"].append(DocumentType.NDA.value)
         state["current_step"] = "nda_quiz"
         logger.info(f"✅ NDA signed - proceeding to quiz")
+        return state
     else:
-        # Not signed yet - DO NOT SIMULATE
+        # Not signed yet - INTERRUPT and wait for webhook
         state["current_step"] = "waiting_nda_signature"
-        logger.info(f"⏳ Waiting for real NDA signature")
+        logger.info(f"⏳ Waiting for NDA signature - INTERRUPTING workflow")
+        interrupt({
+            "status": "waiting_for_signature",
+            "document_type": "nda",
+            "employee_id": state["employee_id"],
+            "message": "Waiting for NDA signature via webhook"
+        })
     
     return state
 
@@ -713,10 +720,17 @@ async def check_dev_guidelines_signed_node(state: OnboardingState) -> Onboarding
         state["documents_signed"].append(DocumentType.DEV_GUIDELINES.value)
         state["current_step"] = "dev_guidelines_quiz"
         logger.info(f"✅ Dev guidelines signed - proceeding to quiz")
+        return state
     else:
-        # Not signed yet - DO NOT SIMULATE
+        # Not signed yet - INTERRUPT and wait for webhook
         state["current_step"] = "waiting_dev_guidelines_signature"
-        logger.info(f"⏳ Waiting for real dev guidelines signature")
+        logger.info(f"⏳ Waiting for dev guidelines signature - INTERRUPTING workflow")
+        interrupt({
+            "status": "waiting_for_signature",
+            "document_type": "dev_guidelines",
+            "employee_id": state["employee_id"],
+            "message": "Waiting for dev guidelines signature via webhook"
+        })
     
     return state
 
