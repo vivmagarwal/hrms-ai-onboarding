@@ -217,7 +217,7 @@ class DocEsignService:
                 # Include employee_id and webhook URLs for callbacks
                 request_data = {
                     "document_id": document_id,
-                    "sender_email": "hr@company.com",
+                    "sender_email": "vivek.agarwal@progressionschool.com",
                     "sender_name": "HR Department",
                     "receiver_email": employee_email,
                     "purpose": f"Please review and sign the {document_type.replace('_', ' ').title()}",
@@ -378,7 +378,7 @@ class EmailService:
                     "subject": subject,
                     "body": body,
                     "from_name": "HR Department",
-                    "from_email": "hr@company.com",
+                    "from_email": "vivek.agarwal@progressionschool.com",
                     "timestamp": datetime.now().isoformat()
                 }
                 
