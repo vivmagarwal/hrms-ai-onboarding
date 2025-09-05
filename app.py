@@ -29,7 +29,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 from typing import TypedDict, Annotated
 import operator
 import openai
@@ -929,6 +929,30 @@ async def api_info():
 # Store workflow threads
 workflow_threads = {}
 
+def restore_workflow_threads():
+    """Restore workflow thread mappings from database on server startup"""
+    try:
+        all_employees = employees_table.all()
+        restored_count = 0
+        
+        for emp in all_employees:
+            # Only restore active workflows (not completed)
+            if emp.get('workflow_thread_id') and emp.get('id'):
+                status = emp.get('onboarding_status', {})
+                if not status.get('completed_at'):
+                    workflow_threads[emp['id']] = emp['workflow_thread_id']
+                    restored_count += 1
+                    
+        logger.info(f"✅ Restored {restored_count} active workflow threads from database")
+        return restored_count
+        
+    except Exception as e:
+        logger.error(f"Error restoring workflow threads: {e}")
+        return 0
+
+# Restore threads on startup
+restore_workflow_threads()
+
 async def resume_workflow_if_needed(employee_id: str, trigger_event: str):
     """Resume interrupted workflow when external event occurs"""
     try:
@@ -948,25 +972,28 @@ async def resume_workflow_if_needed(employee_id: str, trigger_event: str):
         # Resume workflow with current state
         config = {"configurable": {"thread_id": thread_id}}
         
-        # Create state for resume
-        state = OnboardingState(
-            employee_id=employee_id,
-            employee_data=employee,
-            current_step="resume",
-            documents_sent=[],
-            documents_signed=[],
-            quizzes_passed=[],
-            emails_sent=[],
-            errors=[]
-        )
-        
-        # Continue workflow
-        workflow = build_workflow()
-        
-        # Stream workflow execution
-        for output in workflow.stream(state, config=config):
-            logger.info(f"Workflow step result: {output}")
+        try:
+            # CRITICAL FIX: Use Command(resume=None) to resume from interrupt point
+            # Do NOT rebuild the workflow or pass a new state
             
+            # Use the existing workflow instance, not a new one
+            # Use ainvoke since all nodes are async
+            result = await onboarding_workflow.ainvoke(
+                Command(resume=None),  # Resume from interrupt point
+                config=config
+            )
+            
+            logger.info(f"✅ Workflow resumed successfully for {employee_id}")
+            if result:
+                logger.info(f"   Result: {result}")
+                
+        except ValueError as e:
+            if "interrupt" in str(e).lower() or "WORKFLOW_PAUSED" in str(e):
+                # Another interrupt occurred - this is expected behavior
+                logger.info(f"⏸️ Workflow paused again at next step for {employee_id}")
+            else:
+                logger.error(f"ValueError during resume: {e}")
+                
     except Exception as e:
         logger.error(f"Error resuming workflow: {e}")
         # Continue anyway - don't block webhook processing
