@@ -195,7 +195,7 @@ class DocEsignService:
         self.timeout = int(os.getenv("SERVICE_TIMEOUT", "30"))
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def send_document(self, employee_email: str, document_type: str) -> Dict[str, Any]:
+    async def send_document(self, employee_email: str, document_type: str, employee_id: str = None) -> Dict[str, Any]:
         """Send document for signature via doc-esign service"""
         logger.info(f"📤 SENDING DOCUMENT: {document_type} to {employee_email}")
         logger.info(f"📍 Using doc-esign service at: {self.base_url}")
@@ -209,15 +209,20 @@ class DocEsignService:
         
         document_id = document_mapping.get(document_type, document_type)
         
+        # Get HRMS webhook base URL
+        webhook_base_url = os.getenv("HRMS_WEBHOOK_BASE_URL", "https://hrms-ai-onboarding.onrender.com")
+        
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                # Use the correct API endpoint and structure
+                # Include employee_id and webhook URLs for callbacks
                 request_data = {
                     "document_id": document_id,
                     "sender_email": "hr@company.com",
                     "sender_name": "HR Department",
                     "receiver_email": employee_email,
-                    "purpose": f"Please review and sign the {document_type.replace('_', ' ').title()}"
+                    "purpose": f"Please review and sign the {document_type.replace('_', ' ').title()}",
+                    "employee_id": employee_id,
+                    "webhook_base_url": webhook_base_url
                 }
                 
                 logger.debug(f"📨 Request to doc-esign: {request_data}")
@@ -413,7 +418,8 @@ async def send_company_policy_node(state: OnboardingState) -> OnboardingState:
     try:
         result = await doc_esign_service.send_document(
             employee_data["email"], 
-            DocumentType.COMPANY_POLICY.value
+            DocumentType.COMPANY_POLICY.value,
+            state["employee_id"]
         )
         state["documents_sent"].append(DocumentType.COMPANY_POLICY.value)
         
@@ -512,7 +518,8 @@ async def send_nda_node(state: OnboardingState) -> OnboardingState:
         # Send real NDA via doc-esign
         result = await doc_esign_service.send_document(
             employee_data["email"], 
-            DocumentType.NDA.value
+            DocumentType.NDA.value,
+            state["employee_id"]
         )
         state["documents_sent"].append(DocumentType.NDA.value)
         state["current_step"] = "wait_nda_signature"
@@ -593,7 +600,8 @@ async def send_dev_guidelines_node(state: OnboardingState) -> OnboardingState:
         # Send real document via doc-esign
         result = await doc_esign_service.send_document(
             employee_data["email"], 
-            DocumentType.DEV_GUIDELINES.value
+            DocumentType.DEV_GUIDELINES.value,
+            state["employee_id"]
         )
         state["documents_sent"].append(DocumentType.DEV_GUIDELINES.value)
         state["current_step"] = "wait_dev_guidelines_signature"
